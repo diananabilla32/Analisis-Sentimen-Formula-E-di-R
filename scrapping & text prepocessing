@@ -1,0 +1,147 @@
+#instal dan panggil library yang dibutuhkan untuk analisis sentimen
+library(twitteR)
+library(rtweet)
+library(stringr)
+library(ggplot2)
+library(NLP)
+library(SnowballC)
+library(plyr)
+library(RColorBrewer)
+library(wordcloud)
+library(wordcloud2)
+library(stopwords)
+library(tm)
+library(textclean)
+library(RCurl)
+library(dplyr)
+library(tokenizers)
+library(devtools)
+install_github("nurandi/katadasaR")
+library(katadasaR)
+library(corpus)
+library(tmap)
+
+# Kode API Twitter
+consumer_key <- "FfDAvSTYxUCpi3ZDg3LmDF5Uf"
+consumer_secret <- "YkRGsxZtTcPEgnZfwK5hXttXlwh4FAFmRZdjy9KM1lNA105Wid"
+access_token <- "1332748896213241856-yno15meVJepPd6WMBQtWe1h213RlnY"
+access_secret <- "WtvnhJVGGcQdXpjEXWkGvd9ryg8ueDyyIQQ27eA5btsb4"
+setup_twitter_oauth(consumer_key, consumer_secret, access_token, access_secret)
+
+#Crawlind Data Twitter
+tweets = searchTwitter('formula',n = 15000,
+                       retryOnRateLimit = 10000, since="2022-05-12",until="2022-05-25")
+n.tweet <- length(tweets)
+tweets.df <- twListToDF(tweets)
+dim(tweets.df)
+tweets[1:10] 
+
+#Menyimpan Data Hasil Crawling
+dataframe=data.frame(tweets.df)
+write.csv(dataframe,file = 'C:\\BISMILLAH\\lgbtislam.csv')
+
+
+uniq.text <- read.csv('C:\\BISMILLAH\\PROSES\\FORMULADUP1.csv')
+#Pre-Processing data
+# Membangun corpus data
+twetnabil=data.frame(uniq.text)
+View(twetnabil)
+tweet.corpus<-VCorpus(VectorSource(twetnabil$x))
+# 1. CASEFOLDING
+#Transform to lower case
+tweet.corpus<-tm_map(tweet.corpus, content_transformer(tolower))
+casefolding<-data.frame(text=sapply(tweet.corpus,as.character), stringsAsFactors = FALSE)
+View(casefolding)
+write.csv(casefolding, file = "C:\\BISMILLAH\\PROSES\\casefoldingbaru.csv")
+# 2 CLEANSING DATA 
+#Remove URL
+remove.URL<-function(x){gsub("http[^[:space:]]*", "", x)}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(remove.URL))
+removeurl<-data.frame(text=sapply(tweet.corpus,as.character), 
+                      stringsAsFactors = FALSE)
+View(removeurl)
+write.csv(removeurl, file = "C:\\BISMILLAH\\PROSES\\remove_urlbaru.csv")
+#Unescape HTML
+unescapeHTML<-function(str){xml2::xml_text(xml2::read_html(paste0("<x>", str, "</x>")))}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(unescapeHTML))
+removehtml<-data.frame(text=sapply(tweet.corpus,as.character),stringsAsFactors = FALSE)
+View(removehtml)
+write.csv(removehtml, file ="C:\\BISMILLAH\\PROSES\\remove_htmlbaru.csv") 
+#Remove Mention
+removemention<-function(x){gsub("@\\w+", "",x)}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(removemention))
+removemention<-data.frame(text=sapply(tweet.corpus,as.character), stringsAsFactors = FALSE)
+View(removemention)
+write.csv(removemention,file="C:\\BISMILLAH\\PROSES\\removementionbaru.csv") 
+
+#Menghapus hastag
+removehastag<-function(x){gsub("#\\S+","",x)}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(removehastag))
+removehastag<-data.frame(text=sapply(tweet.corpus,as.character), stringsAsFactors = FALSE)
+View(removehastag)
+
+write.csv(removehastag, file = "C:\\BISMILLAH\\PROSES\\removehastagbaru.csv")
+
+#Remove Emoticon
+removeemoticon<-function(x){gsub("[^\x01-\x7F]","", x)}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(removeemoticon))
+remove_emoticon<-data.frame(text=sapply(tweet.corpus,as.character), stringsAsFactors = FALSE)
+View(remove_emoticon)
+
+#Remove Punctuation(tandabaca)
+tweet.corpus<-tm_map(tweet.corpus, removePunctuation)
+removepunctuation<-data.frame(text=sapply(tweet.corpus,as.character),
+                              stringsAsFactors = FALSE)
+View(removepunctuation)
+#removeRT
+removeRT<-function(x){gsub("rt","", x)}
+tweet.corpus<-tm_map(tweet.corpus,content_transformer(removeRT))
+removeRT<-data.frame(text=sapply(tweet.corpus,as.character), stringsAsFactors = FALSE)
+View(removeRT)
+
+#9. Normalisasi Kata
+spell.lex<-read.csv('C:\\SKRIPSSI\\colloquial-indonesian-lexicon.csv', sep = ",", header=T)
+spell.correction = content_transformer(function(x, dict){
+  words = sapply(unlist(str_split(x, "\\s+")),function(x){
+    if(is.na(spell.lex[match(x, dict$slang),"formal"])){
+      x = x
+    } else{
+      x = spell.lex[match(x, dict$slang),"formal"]
+    }
+  })
+  x = paste(words, collapse = " ")
+})
+tweet.corpus=tm_map(tweet.corpus, spell.correction, spell.lex)
+norm<-data.frame(text=sapply(tweet.corpus, as.character),stringsAsFactors = FALSE)
+View(norm)
+#Remove Number
+tweet.corpus<-tm_map(tweet.corpus, removeNumbers)
+number<-data.frame(text=sapply(tweet.corpus, as.character),stringsAsFactors = FALSE)
+View(number)
+write.csv(number, file="C:\\BISMILLAH\\PROSES\\numberbaru.csv")
+
+#NORMALISASI PERBAIKAN KATA EJAAN ATAU SLANG
+stetam1 <- read.csv('C:\\BISMILLAH\\PROSES\\stetambaru.csv', header=T)
+old_stemm <- as.character(stetam1$old)
+new_stemm <- as.character(stetam1$new)
+stemmword <- function(x)Reduce(function(x,r)
+  gsub(stetam1$old[r],stetam1$new[r],x,fixed=T),seq_len(nrow(stetam1)),x)
+dok_slangword=tm_map(tweet.corpus, content_transformer(stemmword))
+tweet.corpus<-data.frame(text=sapply(dok_slangword, as.character), stringsAsFactors = FALSE)
+View(tweet.corpus)
+
+#11.idstop word
+stopwords.id=readLines('C:\\BISMILLAH\\DATA INPUT\\ID-Stopwords.txt')
+tweet.corpus<-tm_map(dok_slangword,removeWords,stopwords.id)
+stop<-data.frame(text=sapply(tweet.corpus, as.character),stringsAsFactors = FALSE)
+View(stop)
+write.csv(stop, file="C:\\BISMILLAH\\PROSES\\FORMULASTOPbaru.csv")
+
+#10. Stemming
+stemming =function(x){ paste(sapply(unlist(str_split(x,'\\s+')),katadasar),collapse = " ")} 
+tweet.corpus=tm_map(tweet.corpus, content_transformer(stemming))
+stem<-data.frame(text=sapply(tweet.corpus, as.character), stringsAsFactors = FALSE) 
+View(stem)
+write.csv(stem, file="C:\\BISMILLAH\\PROSES\\stemmingbaru.csv")
+write.csv(stem,file="C:\\BISMILLAH\\PROSES\\CLEANBARU1.csv")
+
